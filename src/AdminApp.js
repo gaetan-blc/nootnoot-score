@@ -28,8 +28,6 @@ function App() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-
-
   // --- Wallet Connection ---
 
   const connectWallet = useCallback(async () => {
@@ -53,7 +51,7 @@ function App() {
         //     return;
         // }
         // --- End network check ---
-	const targetChainId = '0x2B74'; // <-- Abstract Testnet Chain ID (11124 decimal)
+  const targetChainId = '0x2B74'; // <-- Abstract Testnet Chain ID (11124 decimal)
 if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
     // Update the error message to be specific
     setError(`Please connect to the correct network (Abstract Testnet - Chain ID ${parseInt(targetChainId, 16)}). Current: ${network.name} (${network.chainId})`);
@@ -108,23 +106,6 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
     setSuccessMessage('');
     console.log("Wallet Disconnected");
   };
-
-  useEffect(() => {
-    // Read query parameters from the URL when the component mounts
-    const queryParams = new URLSearchParams(window.location.search);
-    const scoreFromUrl = queryParams.get('score'); // Get the value of 'score'
-
-    if (scoreFromUrl) {
-      // Optional: Add some basic validation if desired
-      const scoreNum = parseInt(scoreFromUrl, 10);
-      if (!isNaN(scoreNum) && scoreNum >= 0) {
-        setScoreInput(scoreFromUrl); // Set the input field state
-        console.log(`Score loaded from URL parameter: ${scoreFromUrl}`);
-      } else {
-        console.warn(`Invalid score value ('${scoreFromUrl}') found in URL query parameter.`);
-      }
-    }
-  }, []); // Empty dependency array ensures this runs only once on mount
 
   // Handle account changes
   useEffect(() => {
@@ -382,30 +363,14 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
 
       {isConnected && contract && (
         <main className="App-main">
-
-<section className="actions">
-            <h2>Actions</h2>
-             <div className="action-group">
-                <h3>Submit Score</h3>
-                <input
-                    type="number"
-                    value={scoreInput}
-                    onChange={(e) => setScoreInput(e.target.value)}
-                    placeholder="Your Score"
-                     min="0"
-                />
-                <button onClick={handleSubmitScore} disabled={loading || !tournamentIdInput}>
-                    Submit Score to Tournament {tournamentIdInput || '?'}
-                </button>
-             </div>
-             <div className="action-group">
-                 <h3>Claim Prize</h3>
-                 <p>(Must be the declared winner of an ended tournament)</p>
-                 <button onClick={handleClaimPrize} disabled={loading || !tournamentIdInput}>
-                    Claim Prize for Tournament {tournamentIdInput || '?'}
-                 </button>
-             </div>
-
+          <section className="contract-info">
+            <h2>Contract Info</h2>
+            <p><strong>Address:</strong> {contractAddress}</p>
+            <p><strong>Owner:</strong> {owner || 'Loading...'}</p>
+            <p><strong>Prize Token:</strong> {tokenAddress || 'Loading...'}</p>
+            <p><strong>Status:</strong> {isPaused ? 'Paused' : 'Active'}</p>
+            <p><strong>Last Tournament ID:</strong> {lastTournamentId ?? 'None Created'}</p>
+             <button onClick={fetchContractData} disabled={loading}>Refresh Contract Info</button>
           </section>
 
           <section className="tournament-view">
@@ -429,7 +394,7 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
                     <h3>Details (ID: {tournamentIdInput})</h3>
                     <p><strong>Start Time:</strong> {tournamentDetails.startTime}</p>
                     <p><strong>End Time:</strong> {tournamentDetails.endTime}</p>
-                    <p><strong>Prize ($NOOT):</strong> {tournamentDetails.prizeAmount}</p>
+                    <p><strong>Prize (ERC20):</strong> {tournamentDetails.prizeAmount}</p>
                     <p><strong>Is Active:</strong> {tournamentDetails.isActive ? 'Yes' : 'No'}</p>
                     <p><strong>Winner:</strong> {tournamentDetails.winner}</p>
                 </div>
@@ -464,8 +429,95 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
              {tournamentIdInput && !loading && !tournamentDetails && <p>No data found for Tournament ID {tournamentIdInput}.</p>}
           </section>
 
+          <section className="actions">
+            <h2>Actions</h2>
+             <div className="action-group">
+                <h3>Submit Score</h3>
+                <input
+                    type="number"
+                    value={scoreInput}
+                    onChange={(e) => setScoreInput(e.target.value)}
+                    placeholder="Your Score"
+                     min="0"
+                />
+                <button onClick={handleSubmitScore} disabled={loading || !tournamentIdInput}>
+                    Submit Score to Tournament {tournamentIdInput || '?'}
+                </button>
+             </div>
+             <div className="action-group">
+                 <h3>Claim Prize</h3>
+                 <p>(Must be the declared winner of an ended tournament)</p>
+                 <button onClick={handleClaimPrize} disabled={loading || !tournamentIdInput}>
+                    Claim Prize for Tournament {tournamentIdInput || '?'}
+                 </button>
+             </div>
+             <div className="action-group">
+                 <h3>Maintain Tournaments</h3>
+                  <button onClick={handleCheckExpired} disabled={loading}>
+                     Check & End Expired Tournaments
+                  </button>
+             </div>
 
+          </section>
 
+          {/* Owner Only Section */}
+          {account && owner && account.toLowerCase() === owner.toLowerCase() && (
+            <section className="admin-controls">
+              <h2>Admin Controls (Owner Only)</h2>
+               <div className="action-group">
+                 <h3>Create Tournament</h3>
+                 <label>
+                    Duration:
+                    <select value={durationInput} onChange={(e) => setDurationInput(e.target.value)}>
+                        <option value="600">10 Minutes</option>
+                        <option value="86400">1 Day</option>
+                        <option value="604800">1 Week</option>
+                        <option value="2592000">1 Month</option>
+                    </select>
+                 </label>
+                 <button onClick={handleCreateTournament} disabled={loading}>Create New Tournament</button>
+               </div>
+               <div className="action-group">
+                    <h3>Manually End Tournament</h3>
+                    <p>(Use ID from 'View Tournament' section)</p>
+                    <button onClick={handleEndTournament} disabled={loading || !tournamentIdInput}>
+                        End Tournament {tournamentIdInput || '?'}
+                    </button>
+               </div>
+               <div className="action-group">
+                    <h3>Manage Prize Token</h3>
+                    <input
+                        type="text"
+                        value={newTokenAddressInput}
+                        onChange={(e) => setNewTokenAddressInput(e.target.value)}
+                        placeholder="New ERC20 Token Address"
+                    />
+                    <button onClick={handleSetToken} disabled={loading || !newTokenAddressInput}>Set Token</button>
+               </div>
+               <div className="action-group">
+                    <h3>Deposit Prize Tokens</h3>
+                    <input
+                        type="number"
+                        step="any"
+                        value={depositAmountInput}
+                        onChange={(e) => setDepositAmountInput(e.target.value)}
+                        placeholder="Amount (e.g., 100.5)"
+                    />
+                    <button onClick={handleDepositTokens} disabled={loading || !depositAmountInput || !tokenAddress}>Deposit Tokens</button>
+                    {tokenAddress && <p><small>Depositing token: {tokenAddress}</small></p>}
+               </div>
+
+               <div className="action-group">
+                    <h3>Contract Pause Control</h3>
+                    {!isPaused ? (
+                        <button onClick={handlePause} disabled={loading}>Pause Contract</button>
+                    ) : (
+                        <button onClick={handleUnpause} disabled={loading}>Unpause Contract</button>
+                    )}
+               </div>
+
+            </section>
+          )}
         </main>
       )}
     </div>
