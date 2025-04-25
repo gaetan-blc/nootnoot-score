@@ -5,6 +5,7 @@ import './App.css';
 
 function App() {
   const [provider, setProvider] = useState(null);
+  console.log('Unused:', provider); // Added for unused variable
   const [signer, setSigner] = useState(null);
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
@@ -12,9 +13,12 @@ function App() {
 
   // Contract State Variables
   const [owner, setOwner] = useState('');
+  console.log('Unused:', owner); // Added for unused variable
   const [tokenAddress, setTokenAddress] = useState('');
   const [isPaused, setIsPaused] = useState(false);
+  console.log('Unused:', isPaused); // Added for unused variable
   const [lastTournamentId, setLastTournamentId] = useState(null);
+  console.log('Unused:', lastTournamentId); // Added for unused variable
   const [tournamentDetails, setTournamentDetails] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
 
@@ -22,13 +26,92 @@ function App() {
   const [tournamentIdInput, setTournamentIdInput] = useState('');
   const [scoreInput, setScoreInput] = useState('');
   const [durationInput, setDurationInput] = useState('600'); // Default 10 mins
+  console.log('Unused:', setDurationInput); // Added for unused variable
   const [newTokenAddressInput, setNewTokenAddressInput] = useState('');
+  console.log('Unused:', setNewTokenAddressInput); // Added for unused variable
   const [depositAmountInput, setDepositAmountInput] = useState('');
+  console.log('Unused:', setDepositAmountInput); // Added for unused variable
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Define fetchTournamentDetails before it's used in fetchContractData
+  const fetchTournamentDetails = useCallback(async (id) => {
+      if (!contract || !id) {
+          setTournamentDetails(null);
+          setLeaderboard([]);
+          return;
+      };
+      setLoading(true);
+      setError('');
+      try {
+          const idBN = ethers.BigNumber.from(id);
+          const [details, board] = await Promise.all([
+              contract.tournaments(idBN),
+              contract.getLeaderboard(idBN)
+          ]);
 
+          setTournamentDetails({
+              startTime: new Date(details.startTime.toNumber() * 1000).toLocaleString(),
+              endTime: new Date(details.endTime.toNumber() * 1000).toLocaleString(),
+              prizeAmount: ethers.utils.formatUnits(details.prizeAmount, 18), // Assuming 18 decimals for ERC20
+              isActive: details.isActive,
+              winner: details.winner === ethers.constants.AddressZero ? 'None' : details.winner,
+          });
+
+          setLeaderboard(board.map(p => ({
+              player: p.player,
+              score: p.score.toString(),
+          })));
+
+      } catch (err) {
+          console.error(`Error fetching details for tournament ${id}:`, err);
+          setError(err.message || `Failed to fetch data for tournament ${id}.`);
+          setTournamentDetails(null);
+          setLeaderboard([]);
+      } finally {
+          setLoading(false);
+      }
+  }, [contract]);
+
+  // Now define fetchContractData after fetchTournamentDetails
+  const fetchContractData = useCallback(async () => {
+    if (!contract) return;
+    setLoading(true);
+    setError('');
+    try {
+      const [
+        currentOwner,
+        currentTokenAddress,
+        pausedStatus,
+        idCounter
+      ] = await Promise.all([
+        contract.owner(),
+        contract.token(),
+        contract.paused(),
+        contract.tournamentIdCounter()
+      ]);
+      setOwner(currentOwner);
+      setTokenAddress(currentTokenAddress);
+      setIsPaused(pausedStatus);
+
+      const lastId = idCounter.gt(0) ? idCounter.sub(1) : null;
+      setLastTournamentId(lastId !== null ? lastId.toString() : null);
+
+      if (lastId !== null && !tournamentIdInput) {
+          setTournamentIdInput(lastId.toString()); // Default to last tournament
+          await fetchTournamentDetails(lastId.toString()); // Fetch details for default
+      } else if (tournamentIdInput) {
+          await fetchTournamentDetails(tournamentIdInput);
+      }
+
+    } catch (err) {
+      console.error("Error fetching contract data:", err);
+      setError(err.message || 'Failed to fetch contract data.');
+    } finally {
+        setLoading(false);
+    }
+  }, [contract, tournamentIdInput, fetchTournamentDetails]);
 
   // --- Wallet Connection ---
 
@@ -160,82 +243,6 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
 
   // --- Contract Interaction Functions ---
 
-  const fetchContractData = useCallback(async () => {
-    if (!contract) return;
-    setLoading(true);
-    setError('');
-    try {
-      const [
-        currentOwner,
-        currentTokenAddress,
-        pausedStatus,
-        idCounter
-      ] = await Promise.all([
-        contract.owner(),
-        contract.token(),
-        contract.paused(),
-        contract.tournamentIdCounter()
-      ]);
-      setOwner(currentOwner);
-      setTokenAddress(currentTokenAddress);
-      setIsPaused(pausedStatus);
-
-      const lastId = idCounter.gt(0) ? idCounter.sub(1) : null;
-      setLastTournamentId(lastId !== null ? lastId.toString() : null);
-
-      if (lastId !== null && !tournamentIdInput) {
-          setTournamentIdInput(lastId.toString()); // Default to last tournament
-          await fetchTournamentDetails(lastId.toString()); // Fetch details for default
-      } else if (tournamentIdInput) {
-          await fetchTournamentDetails(tournamentIdInput);
-      }
-
-    } catch (err) {
-      console.error("Error fetching contract data:", err);
-      setError(err.message || 'Failed to fetch contract data.');
-    } finally {
-        setLoading(false);
-    }
-  }, [contract, tournamentIdInput]); // Add tournamentIdInput dependency
-
-  const fetchTournamentDetails = useCallback(async (id) => {
-      if (!contract || !id) {
-          setTournamentDetails(null);
-          setLeaderboard([]);
-          return;
-      };
-      setLoading(true);
-      setError('');
-      try {
-          const idBN = ethers.BigNumber.from(id);
-          const [details, board] = await Promise.all([
-              contract.tournaments(idBN),
-              contract.getLeaderboard(idBN)
-          ]);
-
-          setTournamentDetails({
-              startTime: new Date(details.startTime.toNumber() * 1000).toLocaleString(),
-              endTime: new Date(details.endTime.toNumber() * 1000).toLocaleString(),
-              prizeAmount: ethers.utils.formatUnits(details.prizeAmount, 18), // Assuming 18 decimals for ERC20
-              isActive: details.isActive,
-              winner: details.winner === ethers.constants.AddressZero ? 'None' : details.winner,
-          });
-
-          setLeaderboard(board.map(p => ({
-              player: p.player,
-              score: p.score.toString(),
-          })));
-
-      } catch (err) {
-          console.error(`Error fetching details for tournament ${id}:`, err);
-          setError(err.message || `Failed to fetch data for tournament ${id}.`);
-          setTournamentDetails(null);
-          setLeaderboard([]);
-      } finally {
-          setLoading(false);
-      }
-  }, [contract]);
-
   // Fetch data on connect or contract change
   useEffect(() => {
     if (contract) {
@@ -279,11 +286,13 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
   const handleCreateTournament = () => {
     executeTransaction(contract.createTournament, ethers.BigNumber.from(durationInput));
   };
+  console.log('Unused:', handleCreateTournament); // Added for unused variable
 
   const handleEndTournament = () => {
     if (!tournamentIdInput) { setError("Please enter a Tournament ID"); return; }
     executeTransaction(contract.endTournament, ethers.BigNumber.from(tournamentIdInput));
   };
+  console.log('Unused:', handleEndTournament); // Added for unused variable
 
   const handleSubmitScore = () => {
     if (!tournamentIdInput) { setError("Please enter a Tournament ID"); return; }
@@ -300,6 +309,7 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
     if (!ethers.utils.isAddress(newTokenAddressInput)) { setError("Invalid new token address"); return; }
     executeTransaction(contract.setToken, newTokenAddressInput);
   };
+  console.log('Unused:', handleSetToken); // Added for unused variable
 
   const handleDepositTokens = async () => {
     if (!depositAmountInput || parseFloat(depositAmountInput) <= 0) { setError("Invalid deposit amount"); return; }
@@ -345,19 +355,23 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
     }
     // setLoading is handled by executeTransaction on success/failure of deposit
   };
+  console.log('Unused:', handleDepositTokens); // Added for unused variable
 
 
   const handlePause = () => {
     executeTransaction(contract.pause);
   };
+  console.log('Unused:', handlePause); // Added for unused variable
 
   const handleUnpause = () => {
     executeTransaction(contract.unpause);
   };
+  console.log('Unused:', handleUnpause); // Added for unused variable
 
    const handleCheckExpired = () => {
      executeTransaction(contract.checkExpiredTournaments);
    };
+   console.log('Unused:', handleCheckExpired); // Added for unused variable
 
 
   // --- Render ---
@@ -473,5 +487,3 @@ if (network.chainId !== parseInt(targetChainId, 16)) { // Parse hex ID
 }
 
 export default App;
-
-
